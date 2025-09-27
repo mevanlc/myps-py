@@ -6,7 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "psutil>=7.0.0",
+    "rich>=14.1.0",
 ]
 
 [project.scripts]
-myps = "myps:myps.main"
+mypsc = "myps:cli.main"
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"

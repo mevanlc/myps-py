@@ -26,6 +26,8 @@ PATTERN_SKIP = re.compile('|'.join([
 PATTERN_KEEP = re.compile('|'.join([
     r"/Applications/iTerm2?.app/",
     r"/Applications/Utilities/Terminal.app/",
+    r"/Wine",
+    r"[Xx][Cc]ode"
 ]))
 
 TRUNC_INDICATOR = "…"
