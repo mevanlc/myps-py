@@ -8,12 +8,14 @@ import os
 import re
 import shutil
 import sys
+from functools import wraps
 from typing import Iterator
 
 import psutil
 from psutil import Process
+from rich.console import Console
+from rich.text import Text
 
-# 
 PATTERN_SKIP = re.compile('|'.join([
     r"^/System/",
     r"^/usr/sbin/",
@@ -26,9 +28,29 @@ PATTERN_SKIP = re.compile('|'.join([
 PATTERN_KEEP = re.compile('|'.join([
     r"/Applications/iTerm2?.app/",
     r"/Applications/Utilities/Terminal.app/",
-    r"/Wine",
     r"[Xx][Cc]ode"
 ]))
+
+console: Console | None = None
+
+# @overload
+# def print(
+#     *values: object, sep: str | None = " ", end: str | None = "\n", file: SupportsWrite[str] | None = None, flush: Literal[False] = False,
+# ) -> None: ...
+# @overload
+# def print(
+#     *values: object, sep: str | None = " ", end: str | None = "\n", file: _SupportsWriteAndFlush[str] | None = None, flush: bool
+# ) -> None: ...
+VALID_PRINT_KWARGS = {"sep", "end", "file", "flush"}
+@wraps(Console.print, assigned=("__signature__",))
+def console_print(*args: object, **kwargs: object) -> None:
+    global console
+    if console is None:
+        fwd_kwargs = {k: v for k, v in kwargs.items() if k in VALID_PRINT_KWARGS}
+        print(*args, **fwd_kwargs) # type: ignore
+    else:
+        console.print(*args, **kwargs) # type: ignore
+
 
 TRUNC_INDICATOR = "…"
 
@@ -98,28 +120,36 @@ def main():
     if myprocs:
         tree = PSTree.from_processes(myprocs)
         printer = PSTreePrinter(tree)
+        console = Console()
+        use_rich_output = sys.stdout.isatty()  # Only use rich styling for terminal output
 
         # Build full pre-order traversal once so we can both search and print
-        full_lines, pid_to_line = printer.build_all_lines_with_map()
+        full_lines, pid_to_line = printer.build_all_lines_with_map(use_rich=use_rich_output)
 
         if re_pattern:
             if args.keep_ancestors:
                 # Identify matching PIDs by searching their full formatted line
                 matching_pids: set[int] = set()
                 for pid, line in pid_to_line.items():
-                    if re_pattern.search(line):
+                    search_text = line.plain
+                    if re_pattern.search(search_text):
                         matching_pids.add(pid)
 
                 include_pids = tree.include_with_ancestors(matching_pids)
-                lines = printer.build_lines_for_include(include_pids)
+                lines = printer.build_lines_for_include(include_pids, use_rich=use_rich_output)
             else:
-                # Legacy behavior: filter flattened lines only
-                lines = [ln for ln in full_lines if re_pattern.search(ln)]
+                lines = [ln for ln in full_lines if re_pattern.search(ln.plain)]
         else:
             lines = full_lines
 
         for ln in lines:
-            print(truncate_line(ln, term_width))
+            if use_rich_output:
+                # For rich output, truncate and print with console
+                if term_width:
+                    ln.truncate(term_width, overflow="ellipsis")
+                console.print(ln, highlight=False)
+            else:
+                print(truncate_line(ln, term_width))
         if args.verbose and re_pattern:
             print(f"Matched lines: {len(lines)}")
     else:
@@ -186,18 +216,31 @@ def safe_get_cmdline(proc: Process) -> str:
         return ""
 
 
-def fmt_line(proc: Process, indent_level: int):
+def fmt_line(proc: Process, indent_level: int, use_rich: bool = False) -> Text:
     indent = "  " * indent_level
     name = safe_get_name(proc)
     pid = safe_get_pid(proc)
     cmdline = safe_get_cmdline(proc)
-    s = f"{indent}{name} {pid} {cmdline}"
-    return s
+
+    
+
+    if use_rich:
+        text = Text()
+        text.append(indent)
+        text.append(name, style="bold cyan")
+        text.append(" ")
+        text.append(str(pid), style="yellow")
+        text.append(" ")
+        text.append(cmdline, style="dim")
+        return_value: Text =  text
+    else:
+        s = f"{indent}{name} {pid} {cmdline}"
+        return_value: Text = Text(s)
+    return return_value
 
 
-def truncate_line(line: str, max_length: int) -> str:
-    if max_length and len(line) > max_length:
-        line = line[:max_length - len(TRUNC_INDICATOR)] + TRUNC_INDICATOR
+def truncate_line(line: Text, max_length: int) -> Text:
+    line.truncate(max_length, overflow="ellipsis")
     return line
 
 def build_tree(
@@ -207,8 +250,8 @@ def build_tree(
     # Backward-compat helper, now implemented via PSTreePrinter
     tree = PSTree(roots=roots, children_map=children_map)
     printer = PSTreePrinter(tree)
-    lines, _ = printer.build_all_lines_with_map()
-    return lines
+    lines, _ = printer.build_all_lines_with_map(use_rich=False)
+    return [str(line) for line in lines]
 
 class PSTree:
     def __init__(self, *, roots: list[Process], children_map: dict[int, list[Process]]):
@@ -261,17 +304,16 @@ class PSTree:
                 cur = self.parent_map.get(cur, 0)
         return include
 
-
 class PSTreePrinter:
     def __init__(self, tree: PSTree):
         self.tree = tree
 
-    def build_all_lines_with_map(self) -> tuple[list[str], dict[int, str]]:
-        lines: list[str] = []
-        pid_to_line: dict[int, str] = {}
+    def build_all_lines_with_map(self, use_rich: bool = False) -> tuple[list[Text], dict[int, Text]]:
+        lines: list[Text] = []
+        pid_to_line: dict[int, Text] = {}
 
         def walk(proc: Process, depth: int) -> None:
-            line = fmt_line(proc, depth)
+            line = fmt_line(proc, depth, use_rich=use_rich)
             lines.append(line)
             pid_to_line[safe_get_pid(proc)] = line
             for child in self.tree.children_map.get(proc.pid, []):
@@ -281,13 +323,13 @@ class PSTreePrinter:
             walk(root, 0)
         return lines, pid_to_line
 
-    def build_lines_for_include(self, include_pids: set[int]) -> list[str]:
-        lines: list[str] = []
+    def build_lines_for_include(self, include_pids: set[int], use_rich: bool = False) -> list[Text]:
+        lines: list[Text] = []
 
         def walk(proc: Process, depth: int) -> None:
             pid = safe_get_pid(proc)
             if pid in include_pids:
-                lines.append(fmt_line(proc, depth))
+                lines.append(fmt_line(proc, depth, use_rich=use_rich))
                 for child in self.tree.children_map.get(proc.pid, []):
                     walk(child, depth + 1)
             else:

@@ -10,8 +10,13 @@ dependencies = [
 ]
 
 [project.scripts]
-mypsc = "myps:cli.main"
+myps = "myps:cli.main"
 
 [build-system]
 requires = ["uv_build"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.2",
+]
