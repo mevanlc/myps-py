@@ -7,6 +7,7 @@ import fnmatch
 import os
 import re
 import shutil
+import signal
 import sys
 from functools import wraps
 from typing import Iterator
@@ -44,8 +45,29 @@ console: Console | None = None
 
 TRUNC_INDICATOR = "…"
 
+def main() -> None:
+    # Reset SIGPIPE to default behavior to avoid BrokenPipeError when piping to less/head/etc
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
-def main():
+    try:
+        cli_main()
+    except (BrokenPipeError, KeyboardInterrupt):
+        pass
+    finally:
+        # Explicitly close stdout/stderr to catch any BrokenPipeError during cleanup
+        try:
+            sys.stdout.flush()
+            sys.stdout.close()
+        except BrokenPipeError:
+            pass
+        try:
+            sys.stderr.flush()
+            sys.stderr.close()
+        except BrokenPipeError:
+            pass
+        sys.exit(0)
+
+def cli_main():
     parser = argparse.ArgumentParser(epilog="<Epilog>")
     parser.add_argument(
         "-f", "--full", action="store_true", help="Disable terminal-width truncation"
