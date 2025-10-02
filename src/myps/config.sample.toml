@@ -1,0 +1,15 @@
+# Example myps configuration
+# Define regex patterns to skip/keep processes. Keys are descriptive only.
+[regexSkipPatterns]
+system = '^/System/'
+usr_sbin = '^/usr/sbin/'
+usr_libexec = '^/usr/libexec/'
+applications = '^/Applications/'
+library = '^/Library/'
+httpd = '/httpd$'
+php_fpm = '/php-fpm$'
+
+[regexKeepPatterns]
+iterm = '/Applications/iTerm2?.app/'
+terminal = '/Applications/Utilities/Terminal.app/'
+xcode = '[Xx][Cc]ode'

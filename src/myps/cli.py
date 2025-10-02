@@ -9,6 +9,7 @@ import re
 import shutil
 import signal
 import sys
+import textwrap
 from functools import wraps
 from typing import Iterator
 
@@ -17,42 +18,27 @@ from psutil import Process
 from rich.console import Console
 
 import myps.pssafe
-
-from . import pstree
-from .psprinter import PSTreePrinter
-from .pstree import PSTree
-
-# PATTERN_SKIP = re.compile('|'.join([
-#     r"^/System/",
-#     r"^/usr/sbin/",
-#     r"^/usr/libexec/",
-#     r"^/Applications/",
-#     r"^/Library/",
-#     r"/httpd$",
-#     r"/php-fpm$"
-# ]))
-# PATTERN_KEEP = re.compile('|'.join([
-#     r"/Applications/iTerm2?.app/",
-#     r"/Applications/Utilities/Terminal.app/",
-#     r"[Xx][Cc]ode"
-# ]))
-
-
-PATTERN_SKIP = re.compile("zzzzzzzzzzzzzzzzzzzzz")
-PATTERN_KEEP = re.compile("yyyyyyyyyyyyyyyyyyyyy")
+from myps import configutil, pstree
+from myps.psprinter import PSTreePrinter
+from myps.pstree import PSTree
 
 console: Console | None = None
 
 TRUNC_INDICATOR = "…"
 
+
 def main() -> None:
     # Reset SIGPIPE to default behavior to avoid BrokenPipeError when piping to less/head/etc
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
+    exit_code = 0
     try:
-        cli_main()
+        result = cli_main()
+        exit_code = result
     except (BrokenPipeError, KeyboardInterrupt):
         pass
+    except SystemExit as exc:  # pragma: no cover - defensive forward compat
+        exit_code = int(exc.code) if exc.code is not None else 0
     finally:
         # Explicitly close stdout/stderr to catch any BrokenPipeError during cleanup
         try:
@@ -65,10 +51,28 @@ def main() -> None:
             sys.stderr.close()
         except BrokenPipeError:
             pass
-        sys.exit(0)
+        sys.exit(exit_code)
 
-def cli_main():
-    parser = argparse.ArgumentParser(epilog="<Epilog>")
+
+class MyHelpFormatter(
+    argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter
+):
+    pass
+
+
+def cli_main() -> int:
+    parser = argparse.ArgumentParser(
+        epilog=textwrap.dedent(
+            """
+            --init-config writes an example config to the default path
+            (~/.config/myps/config.toml) or to the file given by -c/--config.
+
+            Filters match against each process's full command line string.
+            
+            """
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "-f", "--full", action="store_true", help="Disable terminal-width truncation"
     )
@@ -79,7 +83,7 @@ def cli_main():
         help="Interpret pattern as a regular expression",
     )
     parser.add_argument(
-        "-c",
+        "-C",
         "--case",
         action="store_true",
         help="Case-sensitive pattern matching (default is case-insensitive)",
@@ -103,6 +107,18 @@ def cli_main():
         help="Control colored output (default: auto)",
     )
     parser.add_argument(
+        "-c",
+        "--config",
+        dest="config_path",
+        metavar="FILE",
+        help="Read config from <file> instead of ~/.config/myps/config.toml",
+    )
+    parser.add_argument(
+        "--init-config",
+        action="store_true",
+        help="Write example config to the target path and exit",
+    )
+    parser.add_argument(
         "filter_pattern",
         nargs="?",
         default="",
@@ -110,6 +126,29 @@ def cli_main():
         metavar="PATTERN",
     )
     args = parser.parse_args(namespace=CliArgs())
+    if args.verbose:
+        print(f"Args: {args}")
+
+    config_path = configutil.resolve_config_path(args.config_path)
+
+    if args.init_config:
+        try:
+            written_path = configutil.write_sample_config(config_path)
+        except FileExistsError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"Failed to write config file {config_path}: {exc}", file=sys.stderr)
+            return 1
+        print(f"Wrote example config to {written_path}")
+        return 0
+
+    try:
+        config = configutil.load_config(config_path)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
     if args.full or not sys.stdout.isatty():
         term_width = 0
     else:
@@ -117,6 +156,9 @@ def cli_main():
 
     myuid = os.getuid()
     thispid = os.getpid()
+
+    skip_pattern = config.skip_re
+    keep_pattern = config.keep_re
 
     myprocs: list[Process] = []
     proc_iter: Iterator[Process] = psutil.process_iter()
@@ -127,7 +169,9 @@ def cli_main():
             uids = proc.uids()
             if myuid in uids:
                 exe = proc.exe()
-                should_skip = PATTERN_SKIP.search(exe) and not PATTERN_KEEP.search(exe)
+                skip_match = skip_pattern.search(exe) if skip_pattern else None
+                keep_match = keep_pattern.search(exe) if keep_pattern else None
+                should_skip = bool(skip_match and not keep_match)
                 if should_skip:
                     continue
                 myprocs.append(proc)
@@ -212,6 +256,8 @@ def cli_main():
     else:
         print("No matching processes found for current user.")
 
+    return 0
+
 
 def build_proc_graph(
     processes: list[Process],
@@ -261,6 +307,8 @@ class CliArgs:
     verbose: bool = False
     keep_ancestors: bool = False
     color: str = "auto"
+    config_path: str | None = None
+    init_config: bool = False
 
 
 if __name__ == "__main__":

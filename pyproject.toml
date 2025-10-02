@@ -20,4 +20,5 @@ build-backend = "uv_build"
 dev = [
     "ruff>=0.13.2",
     "types-psutil>=7.0.0.20251001",
+    "pytest>=8.4.2",
 ]
