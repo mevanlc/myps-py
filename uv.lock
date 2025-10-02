@@ -35,6 +35,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "ruff" },
+    { name = "types-psutil" },
 ]
 
 [package.metadata]
@@ -44,7 +45,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ruff", specifier = ">=0.13.2" }]
+dev = [
+    { name = "ruff", specifier = ">=0.13.2" },
+    { name = "types-psutil", specifier = ">=7.0.0.20251001" },
+]
 
 [[package]]
 name = "psutil"
@@ -107,4 +111,13 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/00/e7f1501e81e8ec290e79527827af1d88f541d8d26151751b46108978dade/ruff-0.13.2-py3-none-win32.whl", hash = "sha256:7c2a0b7c1e87795fec3404a485096bcd790216c7c146a922d121d8b9c8f1aaac", size = 12245990, upload-time = "2025-09-25T14:54:03.647Z" },
     { url = "https://files.pythonhosted.org/packages/ee/bd/d9f33a73de84fafd0146c6fba4f497c4565fe8fa8b46874b8e438869abc2/ruff-0.13.2-py3-none-win_amd64.whl", hash = "sha256:17d95fb32218357c89355f6f6f9a804133e404fc1f65694372e02a557edf8585", size = 13324004, upload-time = "2025-09-25T14:54:06.05Z" },
     { url = "https://files.pythonhosted.org/packages/c3/12/28fa2f597a605884deb0f65c1b1ae05111051b2a7030f5d8a4ff7f4599ba/ruff-0.13.2-py3-none-win_arm64.whl", hash = "sha256:da711b14c530412c827219312b7d7fbb4877fb31150083add7e8c5336549cea7", size = 12484437, upload-time = "2025-09-25T14:54:08.022Z" },
+]
+
+[[package]]
+name = "types-psutil"
+version = "7.0.0.20251001"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/91/b020f9100b196a1f247cd12575f68dcdad94f032c1e0c42987d7632142ce/types_psutil-7.0.0.20251001.tar.gz", hash = "sha256:60d696200ddae28677e7d88cdebd6e960294e85adefbaafe0f6e5d0e7b4c1963", size = 20469, upload-time = "2025-10-01T03:04:21.292Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/99/50f30e0b648e6f583165cb2e535b0256a02a03efa4868cb2f017ad25b3d8/types_psutil-7.0.0.20251001-py3-none-any.whl", hash = "sha256:adc31de8386d31c61bd4123112fd51e2c700c7502a001cad72a3d56ba6b463d1", size = 23164, upload-time = "2025-10-01T03:04:20.089Z" },
 ]

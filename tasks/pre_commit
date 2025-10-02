@@ -1,0 +1,17 @@
+#!/bin/bash
+
+any_error_rc=0
+
+function run_track_rc {
+    uv run "$@"
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        any_error_rc=$rc
+    fi
+}
+
+run_track_rc tasks/py_fix_imports
+run_track_rc tasks/py_format
+run_track_rc tasks/py_check
+
+exit $any_error_rc
