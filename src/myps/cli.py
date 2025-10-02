@@ -97,6 +97,12 @@ def cli_main():
         help="Keep ancestor of processes matching pattern",
     )
     parser.add_argument(
+        "--color",
+        choices=["always", "auto", "never"],
+        default="auto",
+        help="Control colored output (default: auto)",
+    )
+    parser.add_argument(
         "filter_pattern",
         nargs="?",
         default="",
@@ -161,10 +167,19 @@ def cli_main():
     if myprocs:
         tree = PSTree.from_processes(myprocs)
         printer = PSTreePrinter(tree)
-        console = Console()
-        use_rich_output = (
-            sys.stdout.isatty()
-        )  # Only use rich styling for terminal output
+
+        # Determine if we should use colored output
+        if args.color == "always":
+            use_rich_output = True
+            force_terminal = True
+        elif args.color == "never":
+            use_rich_output = False
+            force_terminal = False
+        else:  # auto
+            use_rich_output = sys.stdout.isatty()
+            force_terminal = None
+
+        console = Console(force_terminal=force_terminal)
 
         # Build full pre-order traversal once so we can both search and print
         full_lines, pid_to_line = printer.build_all_lines_with_map()
@@ -245,6 +260,7 @@ class CliArgs:
     case: bool = False
     verbose: bool = False
     keep_ancestors: bool = False
+    color: str = "auto"
 
 
 if __name__ == "__main__":
