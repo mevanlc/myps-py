@@ -76,14 +76,18 @@ class PSTreePrinter:
     def __init__(
         self,
         tree: PSTree,
-        indent_pad_str: str = " ",
+        indent_pad_str: str = "  ",
         indent_descender: str = "⤷ ",
     ):
         self.tree = tree
         self.indent_padder = indent_pad_str
         self.indent_suffix = indent_descender
+        self.last_indent_level: int | None = None
 
     def build_all_lines_with_map(self) -> tuple[list[Text], dict[int, Text]]:
+        # Reset state for clean build
+        self.last_indent_level = None
+
         lines: list[Text] = []
         pid_to_line: dict[int, Text] = {}
 
@@ -118,11 +122,27 @@ class PSTreePrinter:
 
     def fmt_line(self, proc: Process, indent_level: int) -> Text:
         rich_proc = RichProcess(proc)
-        indent_str = (
-            (self.indent_padder * indent_level) + self.indent_suffix
-            if indent_level > 0
-            else ""
+
+        # Determine if we should show the descender (⤷)
+        # Show it only for the first item in a new indent group
+        show_descender = indent_level > 0 and (
+            self.last_indent_level is None or indent_level > self.last_indent_level
         )
+
+        if indent_level > 0:
+            if show_descender:
+                indent_str = (self.indent_padder * indent_level) + self.indent_suffix
+            else:
+                # Use padding equal to descender length to maintain alignment
+                indent_str = self.indent_padder * indent_level + " " * len(
+                    self.indent_suffix
+                )
+        else:
+            indent_str = ""
+
+        # Update state
+        self.last_indent_level = indent_level
+
         text = Text()
         text.append(indent_str)
         rich_proc.append_to(text)
