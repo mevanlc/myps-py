@@ -1,62 +1,6 @@
-import os
-
-import psutil
 from psutil import Process
 
-
-def proc_key(proc: Process) -> tuple[str, int]:
-    exe = safe_get_exe(proc)
-    pid = safe_get_pid(proc)
-    return (exe, pid)
-
-
-def is_same_exe(cmdline: list[str], exe: str) -> bool:
-    if not cmdline:
-        return False
-    real_cmdline_exe = os.path.realpath(cmdline[0])
-    real_exe = os.path.realpath(exe)
-    return real_cmdline_exe == real_exe
-
-
-def safe_get_cmdline(proc: Process) -> str:
-    try:
-        cmdline = proc.cmdline()
-        exe = safe_get_exe(proc)
-        if not is_same_exe(cmdline, exe):
-            cmdline = [f"<{exe}>"] + cmdline
-        return " ".join(str(c) for c in cmdline).strip()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return ""
-
-def safe_get_process(pid: int) -> Process | None:
-    try:
-        return psutil.Process(pid)
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return None
-
-def safe_get_pid(proc: Process) -> int:
-    try:
-        return proc.pid
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return 0
-
-def safe_get_ppid(proc: Process) -> int:
-    try:
-        return proc.ppid()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return 0
-
-def safe_get_exe(proc: Process) -> str:
-    try:
-        return proc.exe()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return ""
-    
-def safe_get_name(proc: Process) -> str:
-    try:
-        return proc.name()
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return ""
+from myps.pssafe import safe_get_exe, safe_get_pid, safe_get_ppid
 
 
 class PSTree:
@@ -109,4 +53,9 @@ class PSTree:
                 include.add(cur)
                 cur = self.parent_map.get(cur, 0)
         return include
-    
+
+
+def proc_key(proc: Process) -> tuple[str, int]:
+    exe = safe_get_exe(proc)
+    pid = safe_get_pid(proc)
+    return (exe, pid)

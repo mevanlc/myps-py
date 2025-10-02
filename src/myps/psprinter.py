@@ -1,19 +1,94 @@
+import os
+from dataclasses import dataclass
+
 from psutil import Process
+from rich.abc import RichRenderable
+from rich.style import StyleType
 from rich.text import Text
 
-from .pstree import PSTree, safe_get_cmdline, safe_get_name, safe_get_pid
+from .pssafe import safe_get_cmdline, safe_get_exe, safe_get_name, safe_get_pid
+from .pstree import PSTree
+
+
+@dataclass
+class RichProcessStyles:
+    pid_style: StyleType = "yellow"
+    name_style: StyleType = "bold cyan"
+    cmdline_exe_style: StyleType = "green"
+    cmdline_args_style: StyleType = "dim"
+    exe_style: StyleType = "bright_green"
+    delimiter_style: StyleType = "dim"
+
+
+class RichProcess(RichRenderable):
+    def __init__(
+        self, proc: Process, styles: RichProcessStyles = RichProcessStyles()
+    ) -> None:
+        self.proc = proc
+        self.pid = safe_get_pid(proc)
+        self.name = safe_get_name(proc)
+        self.exe = safe_get_exe(proc)
+        self.cmdline = safe_get_cmdline(proc)
+        self.cmdline_exe = self.cmdline[0] if self.cmdline else ""
+        self.cmdline_args = self.cmdline[1:]
+        self.styles = styles
+        self.proc = proc
+
+    def append_to(self, text: Text) -> Text:
+        text.append(self.name, style=self.styles.name_style)
+        text.append(" ")
+        text.append(str(self.pid), style=self.styles.pid_style)
+        text.append(" ")
+        if os.path.basename(self.exe) != self.name:
+            raise ValueError(
+                f"Executable basename {os.path.basename(self.exe)!r} does not match process name {self.name!r}"
+            )
+        if not self.is_argv0_equal_to_exe():
+            text.append("<", style=self.styles.delimiter_style)
+            text.append(f"{self.exe}", style=self.styles.exe_style)
+            text.append(">", style=self.styles.delimiter_style)
+            text.append(" ")
+        if self.cmdline:
+            text.append(self.cmdline[0], style=self.styles.cmdline_exe_style)
+            if self.cmdline_args:
+                text.append(" ")
+                text.append(
+                    " ".join(self.cmdline_args), style=self.styles.cmdline_args_style
+                )
+        return text
+
+    def __rich__(self) -> Text:
+        text = Text()
+        self.append_to(text)
+        return text
+
+    def is_argv0_equal_to_exe(self) -> bool:
+        if not self.cmdline:
+            return False
+        if os.path.isabs(self.cmdline[0]) == os.path.isabs(self.exe):
+            return os.path.samefile(self.cmdline[0], self.exe)
+        clexe_nc = os.path.normpath(os.path.normcase(self.cmdline[0]))
+        exe_nc = os.path.normpath(os.path.normcase(self.exe))
+        return clexe_nc == exe_nc
 
 
 class PSTreePrinter:
-    def __init__(self, tree: PSTree):
+    def __init__(
+        self,
+        tree: PSTree,
+        indent_pad_str: str = " ",
+        indent_descender: str = "⤷ ",
+    ):
         self.tree = tree
+        self.indent_padder = indent_pad_str
+        self.indent_suffix = indent_descender
 
-    def build_all_lines_with_map(self, use_rich: bool = False) -> tuple[list[Text], dict[int, Text]]:
+    def build_all_lines_with_map(self) -> tuple[list[Text], dict[int, Text]]:
         lines: list[Text] = []
         pid_to_line: dict[int, Text] = {}
 
         def walk(proc: Process, depth: int) -> None:
-            line = self.fmt_line(proc, depth, use_rich=use_rich)
+            line = self.fmt_line(proc, depth)
             lines.append(line)
             pid_to_line[safe_get_pid(proc)] = line
             for child in self.tree.children_map.get(proc.pid, []):
@@ -23,13 +98,13 @@ class PSTreePrinter:
             walk(root, 0)
         return lines, pid_to_line
 
-    def build_lines_for_include(self, include_pids: set[int], use_rich: bool = False) -> list[Text]:
+    def build_lines_for_include(self, include_pids: set[int]) -> list[Text]:
         lines: list[Text] = []
 
         def walk(proc: Process, depth: int) -> None:
             pid = safe_get_pid(proc)
             if pid in include_pids:
-                lines.append(self.fmt_line(proc, depth, use_rich=use_rich))
+                lines.append(self.fmt_line(proc, depth))
                 for child in self.tree.children_map.get(proc.pid, []):
                     walk(child, depth + 1)
             else:
@@ -41,31 +116,14 @@ class PSTreePrinter:
             walk(root, 0)
         return lines
 
-
-    @staticmethod
-    def fmt_line(proc: Process, indent_level: int, use_rich: bool = False) -> Text:
-        indent = "  " * indent_level
-        name = safe_get_name(proc)
-        pid = safe_get_pid(proc)
-        cmdline = safe_get_cmdline(proc)
-
-
-
-        if use_rich:
-            text = Text()
-            text.append(indent)
-            text.append(name, style="bold cyan")
-            text.append(" ")
-            text.append(str(pid), style="yellow")
-            text.append(" ")
-            text.append(cmdline, style="dim")
-            return_value: Text =  text
-        else:
-            s = f"{indent}{name} {pid} {cmdline}"
-            return_value: Text = Text(s)
-        return return_value
-
-    @staticmethod
-    def truncate_line(line: Text, max_length: int) -> Text:
-        line.truncate(max_length, overflow="ellipsis")
-        return line
+    def fmt_line(self, proc: Process, indent_level: int) -> Text:
+        rich_proc = RichProcess(proc)
+        indent_str = (
+            (self.indent_padder * indent_level) + self.indent_suffix
+            if indent_level > 0
+            else ""
+        )
+        text = Text()
+        text.append(indent_str)
+        rich_proc.append_to(text)
+        return text
