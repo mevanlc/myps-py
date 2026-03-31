@@ -110,3 +110,30 @@ terminal = 'Terminal.app/'
     out = capsys.readouterr().out
     assert "Terminal" in out
     assert "Finder" not in out
+
+
+def test_main_propagates_unexpected_exceptions(monkeypatch):
+    class Boom(Exception):
+        pass
+
+    monkeypatch.setattr(cli, "cli_main", lambda: (_ for _ in ()).throw(Boom("boom")))
+
+    with pytest.raises(Boom, match="boom"):
+        cli.main()
+
+
+def test_rich_process_mismatch_renders_exe_instead_of_raising():
+    proc = StubProcess(
+        pid=123,
+        exe="/opt/homebrew/libexec/git-core/git-remote-http",
+        uids=(501, 501, 501),
+        ppid=1,
+    )
+    proc._name = "git-remote-https"
+    proc._cmdline = ["/opt/homebrew/opt/git/libexec/git-core/git-remote-https"]
+
+    rendered = psprinter.RichProcess(proc).__rich__().plain
+
+    assert "git-remote-https 123" in rendered
+    assert "</opt/homebrew/libexec/git-core/git-remote-http>" in rendered
+    assert "/opt/homebrew/opt/git/libexec/git-core/git-remote-https" in rendered

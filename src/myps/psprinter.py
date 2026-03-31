@@ -39,11 +39,7 @@ class RichProcess(RichRenderable):
         text.append(" ")
         text.append(str(self.pid), style=self.styles.pid_style)
         text.append(" ")
-        if os.path.basename(self.exe) != self.name:
-            raise ValueError(
-                f"Executable basename {os.path.basename(self.exe)!r} does not match process name {self.name!r}"
-            )
-        if not self.is_argv0_equal_to_exe():
+        if self.should_show_exe():
             text.append("<", style=self.styles.delimiter_style)
             text.append(f"{self.exe}", style=self.styles.exe_style)
             text.append(">", style=self.styles.delimiter_style)
@@ -70,6 +66,11 @@ class RichProcess(RichRenderable):
         clexe_nc = os.path.normpath(os.path.normcase(self.cmdline[0]))
         exe_nc = os.path.normpath(os.path.normcase(self.exe))
         return clexe_nc == exe_nc
+
+    def should_show_exe(self) -> bool:
+        if os.path.basename(self.exe) != self.name:
+            return True
+        return not self.is_argv0_equal_to_exe()
 
 
 class PSTreePrinter:

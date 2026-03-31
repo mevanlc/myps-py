@@ -30,28 +30,7 @@ TRUNC_INDICATOR = "…"
 def main() -> None:
     # Reset SIGPIPE to default behavior to avoid BrokenPipeError when piping to less/head/etc
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-
-    exit_code = 0
-    try:
-        result = cli_main()
-        exit_code = result
-    except (BrokenPipeError, KeyboardInterrupt):
-        pass
-    except SystemExit as exc:  # pragma: no cover - defensive forward compat
-        exit_code = int(exc.code) if exc.code is not None else 0
-    finally:
-        # Explicitly close stdout/stderr to catch any BrokenPipeError during cleanup
-        try:
-            sys.stdout.flush()
-            sys.stdout.close()
-        except BrokenPipeError:
-            pass
-        try:
-            sys.stderr.flush()
-            sys.stderr.close()
-        except BrokenPipeError:
-            pass
-        sys.exit(exit_code)
+    raise SystemExit(cli_main())
 
 
 class MyHelpFormatter(
