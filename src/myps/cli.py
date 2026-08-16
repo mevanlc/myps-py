@@ -80,17 +80,28 @@ def cli_main() -> int:
         help="Keep ancestor of processes matching pattern",
     )
     parser.add_argument(
+        "--include-self",
+        action="store_true",
+        help="Include the running myps process",
+    )
+    parser.add_argument(
         "--color",
         choices=["always", "auto", "never"],
         default="auto",
         help="Control colored output (default: auto)",
     )
-    parser.add_argument(
+    config_group = parser.add_mutually_exclusive_group()
+    config_group.add_argument(
         "-c",
         "--config",
         dest="config_path",
         metavar="FILE",
         help="Read config from <file> instead of ~/.config/myps/config.toml",
+    )
+    config_group.add_argument(
+        "--no-config",
+        action="store_true",
+        help="Do not read a config file",
     )
     parser.add_argument(
         "--init-config",
@@ -105,6 +116,8 @@ def cli_main() -> int:
         metavar="PATTERN",
     )
     args = parser.parse_args(namespace=CliArgs())
+    if args.no_config and args.init_config:
+        parser.error("--no-config cannot be used with --init-config")
     if args.verbose:
         print(f"Args: {args}")
 
@@ -122,11 +135,14 @@ def cli_main() -> int:
         print(f"Wrote example config to {written_path}")
         return 0
 
-    try:
-        config = configutil.load_config(config_path)
-    except ValueError as exc:
-        print(exc, file=sys.stderr)
-        return 1
+    if args.no_config:
+        config = configutil.MypsConfig(skip_patterns=[], keep_patterns=[])
+    else:
+        try:
+            config = configutil.load_config(config_path)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
 
     if args.full or not sys.stdout.isatty():
         term_width = 0
@@ -142,7 +158,7 @@ def cli_main() -> int:
     myprocs: list[Process] = []
     proc_iter: Iterator[Process] = psutil.process_iter()
     for proc in proc_iter:
-        if myps.pssafe.safe_get_pid(proc) == thispid:
+        if not args.include_self and myps.pssafe.safe_get_pid(proc) == thispid:
             continue
         try:
             uids = proc.uids()
@@ -285,8 +301,10 @@ class CliArgs:
     case: bool = False
     verbose: bool = False
     keep_ancestors: bool = False
+    include_self: bool = False
     color: str = "auto"
     config_path: str | None = None
+    no_config: bool = False
     init_config: bool = False
 
 

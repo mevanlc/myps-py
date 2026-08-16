@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from myps import cli, psprinter, pssafe
+from myps import cli, configutil, psprinter, pssafe
 
 
 class StubProcess:
@@ -110,6 +110,82 @@ terminal = 'Terminal.app/'
     out = capsys.readouterr().out
     assert "Terminal" in out
     assert "Finder" not in out
+
+
+def test_cli_include_self(monkeypatch, capsys):
+    user_uid = 501
+    self_proc = StubProcess(
+        pid=os.getpid(),
+        exe="/usr/local/bin/myps",
+        uids=(user_uid, user_uid, user_uid),
+        ppid=1,
+    )
+
+    monkeypatch.setattr(os, "getuid", lambda: user_uid)
+    monkeypatch.setattr(cli.psutil, "process_iter", lambda: iter([self_proc]))
+    monkeypatch.setattr(pssafe, "safe_get_process", lambda _pid: None)
+    monkeypatch.setattr(
+        psprinter.RichProcess, "is_argv0_equal_to_exe", lambda self: True
+    )
+
+    base_args = [
+        "myps",
+        "--full",
+        "--color",
+        "never",
+        "--no-config",
+        "-k",
+        "myps",
+    ]
+    sys.argv = base_args
+    assert cli.cli_main() == 0
+    assert capsys.readouterr().out == "No matching processes found for current user.\n"
+
+    sys.argv = [*base_args, "--include-self"]
+    assert cli.cli_main() == 0
+    assert f"myps {os.getpid()}" in capsys.readouterr().out
+
+
+def test_cli_no_config_ignores_default_config(tmp_path, monkeypatch, capsys):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("[regexSkipPatterns]\neverything = '.*'\n")
+    monkeypatch.setattr(configutil, "DEFAULT_CONFIG_PATH", config_path)
+
+    user_uid = 501
+    proc = StubProcess(
+        pid=200,
+        exe="/usr/local/bin/example",
+        uids=(user_uid, user_uid, user_uid),
+        ppid=1,
+    )
+    monkeypatch.setattr(os, "getuid", lambda: user_uid)
+    monkeypatch.setattr(cli.psutil, "process_iter", lambda: iter([proc]))
+    monkeypatch.setattr(pssafe, "safe_get_process", lambda _pid: None)
+    monkeypatch.setattr(
+        psprinter.RichProcess, "is_argv0_equal_to_exe", lambda self: True
+    )
+
+    sys.argv = ["myps", "--full", "--color", "never"]
+    assert cli.cli_main() == 0
+    assert capsys.readouterr().out == "No matching processes found for current user.\n"
+
+    sys.argv = ["myps", "--full", "--color", "never", "--no-config"]
+    assert cli.cli_main() == 0
+    assert "example 200" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--no-config", "--config", "config.toml"],
+        ["--no-config", "--init-config"],
+    ],
+)
+def test_cli_rejects_conflicting_config_options(args):
+    sys.argv = ["myps", *args]
+    with pytest.raises(SystemExit) as exc_info:
+        cli.cli_main()
+    assert exc_info.value.code == 2
 
 
 def test_main_propagates_unexpected_exceptions(monkeypatch):

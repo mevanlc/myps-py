@@ -46,8 +46,9 @@ uv run myps
 ## Usage
 
 ```
-usage: myps [-h] [-f] [-r] [-C] [-v] [-k] [--color {always,auto,never}]
-            [-c FILE] [--init-config]
+usage: myps [-h] [-f] [-r] [-C] [-v] [-k] [--include-self]
+            [--color {always,auto,never}] [-c FILE | --no-config]
+            [--init-config]
             [PATTERN]
 ```
 
@@ -57,9 +58,11 @@ usage: myps [-h] [-f] [-r] [-C] [-v] [-k] [--color {always,auto,never}]
 | `-r`, `--regex` | Interpret `PATTERN` as a regular expression |
 | `-C`, `--case` | Case-sensitive matching (default is case-insensitive) |
 | `-k`, `--keep-ancestors` | Also show the ancestors of matching processes |
+| `--include-self` | Include the running `myps` process (excluded by default) |
 | `-f`, `--full` | Disable truncation to terminal width |
 | `--color {always,auto,never}` | Control colored output (default: `auto`) |
 | `-c`, `--config FILE` | Read config from `FILE` instead of the default path |
+| `--no-config` | Do not read a config file |
 | `--init-config` | Write an example config to the target path and exit |
 | `-v`, `--verbose` | Print argument and match diagnostics |
 
@@ -78,13 +81,14 @@ myps                       # whole tree for your user
 myps 'python*'             # glob match
 myps -r 'node|deno'        # regex match
 myps -k -r 'ssh-agent'     # match plus its ancestors
+myps -k --include-self myps # include myps itself in the match
 myps -f node | less -R     # untruncated, piped
 ```
 
 ## Configuration
 
-Config lives at `~/.config/myps/config.toml` (override with `-c`). Write a
-starting point with:
+Config lives at `~/.config/myps/config.toml` (override with `-c`, or disable
+config loading with `--no-config`). Write a starting point with:
 
 ```bash
 myps --init-config
